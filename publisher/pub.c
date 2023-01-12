@@ -9,8 +9,8 @@
 #include <stdio.h>
 #include "../utils/lib.h"
 
+int server_pipe;
 int session_id;
-int pub_pipe;
 char pipe_file[PIPE_PATH_MAX_SIZE];
 
 int start_server_connection(char const *server_pipe_path, char const *pipe_path, char const *box_name) {
@@ -22,10 +22,8 @@ int start_server_connection(char const *server_pipe_path, char const *pipe_path,
 	if (mkfifo(pipe_path, 0640) == -1) {
 		return -1;
 	}
-	//strcpy(client_pipe_file, pipe_path);
 
 	/* Open server pipe */
-    int server_pipe;
 	if ((server_pipe = open(server_pipe_path, O_WRONLY)) == -1) {
 		return -1;
 	}
@@ -55,7 +53,6 @@ int main(int argc, char **argv) {
     char *pipe_name = argv[2];
     char *box_name = argv[3];
 
-    int server_pipe;
     server_pipe = open(register_pipe_name, O_RDONLY);
     
     if (mkfifo(pipe_name, 0777) == -1) {
@@ -88,6 +85,5 @@ int main(int argc, char **argv) {
     write(pipe_fhandle, buffer2, sizeof(buffer2)); 
 
 
-    WARN("unimplemented"); // TODO: implement
-    return -1;
+    return 0;
 }

@@ -85,8 +85,8 @@ int main(int argc, char **argv) {
     }
 
     char buffer[MESSAGE_MAX_SIZE + sizeof(uint8_t)];
-    ssize_t bytes_read,bytes_written;
 
+    ssize_t bytes_read,bytes_written;
     while(session_active == true){
         if (signal(SIGINT, sig_handler) == SIG_ERR) {
             printf("\n can't catch SIGINT\n");

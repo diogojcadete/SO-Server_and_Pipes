@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #define FILE_NAME_MAX_SIZE 256
 #define PIPE_PATH_MAX_SIZE 32
@@ -15,7 +16,7 @@
 #define PATH_MAX_SIZE 32
 
 enum {
-	OP_CODE_LOGIN_PUB= 1,
+	OP_CODE_LOGIN_PUB = 1,
     OP_CODE_LOGIN_SUB = 2,
 	OP_CODE_CREATE = 3,
     OP_CODE_CR_RESPONSE = 4,
