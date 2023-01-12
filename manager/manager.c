@@ -29,6 +29,7 @@ int start_server_connection(char const *server_pipe_path, char const *pipe_path,
 
 	/* Send request to server */
 	task task_op;
+    task_op.user_type = OP_CODE_MANAGER;
 	strcpy(task_op.pipe_path, pipe_path);
 
     if (strcmp(request, "create") == 0){

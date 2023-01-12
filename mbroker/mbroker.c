@@ -16,7 +16,7 @@
 #define MAX_SESSIONS 128
 #define MAX_BOXES 1024
 
-int number_max_sessions;
+uint32_t number_max_sessions;
 int current_boxes = 0;
 
 mail_box boxes[MAX_BOXES];
@@ -26,7 +26,7 @@ pc_queue_t *task_queue;
 pthread_cond_t thread_cond;
 pthread_mutex_t mutex;
 pthread_t tid[MAX_SESSIONS];
-session sessions[MAX_SESSIONS];
+task *builder;
 
 typedef struct {
 	pthread_t thread;
@@ -43,37 +43,61 @@ int init_server() {
 	return 0;
 }
 
-int inicialize_threads(){
-	pthread_t threads[number_max_sessions];
-    int i;
+void *task_handler(void *builder_v){
+    task *builder_t = (task*) builder_v;
 
-    for (i = 0; i < number_max_sessions; i++) {
-        pthread_create(&threads[i], NULL, task_processor, NULL);
+    char op_code = '\0';
+    while(true){
+        pthread_mutex_lock(&builder_t->lock);
+        while (builder_t->not_building) {
+            pthread_cond_wait(&builder_t->flag, &builder_t->lock);
+        }
+        builder_t->not_building = false;
+        if (memcpy(&op_code, &builder_t->buffer, sizeof(char)) == NULL) {
+            perror("memcpy failed");
+            exit(EXIT_FAILURE);
+        }
+
+
+        // mudar isto para tbm ter os ecrever e ler mensagem
+        // + fazer as respostas
+            /*
+        switch (op_code) {
+        case OP_CODE_LOGIN_PUB:
+            case_pub_request(builder_t);
+        case SUB_REQUEST:
+            case_sub_request(actual_session);
+        case CREATE_BOX_REQUEST:
+            case_create_box(actual_session);
+        case REMOVE_BOX_REQUEST:
+            case_remove_box(actual_session);
+        case LIST_BOXES_REQUEST:
+            case_list_box(actual_session);
+        }
+            */
+        builder_t->not_building = true;
+        pthread_mutex_unlock(&builder_t->lock);
     }
 }
 
-void *task_processor(void *arg) {
-    while (1) {
-        task *task_op = (task *)pcq_dequeue(&task_queue);
-        switch (task_op->opcode) {
-            case OP_CODE_LOGIN_PUB:
-                // handle create request
-                break;
-            case OP_CODE_LOGIN_SUB:
-                // handle read request
-                break;
-            case 'U':
-                // handle update request
-                break;
-            case 'D':
-                // handle delete request
-                break;
-            default:
-                // handle invalid opcode
-                break;
+
+int initialize_threads(task *builder_t) {
+    for (uint32_t i=0; i < number_max_sessions; i++){
+        builder_t[i].not_building = true;
+       	if (pthread_mutex_init(&builder_t[i].lock, NULL) == -1) {
+			return -1;
+		}
+
+        if (pthread_cond_init(&builder_t[i].flag, NULL) == -1){
+            return -1;
         }
+
+        if (pthread_create(&builder_t[i].thread, NULL, task_handler, (void *) builder_t+i) != 0) {
+            fprintf(stderr, "[ERR]: couldn't create threads: %s\n", strerror(errno));
+			return -1;
+		}
     }
-	return NULL;
+    return 0;
 }
 
 
@@ -105,12 +129,10 @@ int main(int argc, char **argv) {
     char *pipe_name = argv[1];
 	printf("Starting TecnicoFS server with pipe called %s\n", pipe_name);
 
-    fprintf(stderr, "usage: mbroker %s\n", pipe_name);
 	/*Get the maximum sessions argument*/
-	number_max_sessions = atoi(argv[2]);
+	number_max_sessions = (uint32_t)atoi(argv[2]);
 	printf("the number of max_sessions has been defined to %d\n", number_max_sessions);
-
-
+    builder = (task*)malloc(number_max_sessions * sizeof(task));
 
     /* Unlink and create server pipe */
 	if (unlink(pipe_name) == -1 && errno != ENOENT) {
@@ -150,7 +172,6 @@ int main(int argc, char **argv) {
         if(server_read<0){
             break;
         }
-		pcq_enqueue(&task_queue, &task_op);
 
     }
 
@@ -162,6 +183,6 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	pcq_destroy(&task_queue);
+
 	return 0;
 }

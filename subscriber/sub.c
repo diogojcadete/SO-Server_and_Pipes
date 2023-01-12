@@ -40,6 +40,7 @@ int start_server_connection(char const *server_pipe_path, char const *pipe_path,
 
 	/* Send request to server */
 	task task_op;
+    task_op.user_type = OP_CODE_SUBBSCRIBER;
 	task_op.opcode = OP_CODE_LOGIN_SUB;
 	strcpy(task_op.pipe_path, pipe_path);
     strcpy(task_op.box_name, box_name);
@@ -93,10 +94,16 @@ int main(int argc, char **argv) {
         }
         bytes_read = read(sub_fd, buffer, sizeof(buffer));
         bytes_written = write(STDOUT_FILENO, buffer, (size_t)bytes_read);
+        if (bytes_written < 0){
+            close(sub_fd);
+            close(server_fd);
+            unlink(sub_pipe);
+            return -1;
+        }
         num_messages++;
     }
     close(sub_fd);
     close(server_fd);
     unlink(sub_pipe);
-    exit(EXIT_SUCCESS);
+    return 0;
 }

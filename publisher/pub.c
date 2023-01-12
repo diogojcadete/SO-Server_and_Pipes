@@ -33,6 +33,7 @@ int start_server_connection(char const *server_pipe_path, char const *pipe_path,
 	task_op.opcode = OP_CODE_LOGIN_PUB;
 	strcpy(task_op.pipe_path, pipe_path);
     strcpy(task_op.box_name, box_name);
+    task_op.user_type = OP_CODE_PUB;
 	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
 		return -1;
 	}
