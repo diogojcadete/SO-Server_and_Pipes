@@ -38,7 +38,9 @@ int init_server() {
         perror("malloc failed");
         return -1;
     }
-	return 0;
+	print("BOB");
+    return 0;
+    
 }
 
 void pub_connect_request(task* builder_t) {
