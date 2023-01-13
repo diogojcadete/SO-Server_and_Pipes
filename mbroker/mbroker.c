@@ -1,5 +1,3 @@
-
-
 #include "logging.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -76,7 +74,7 @@ void pub_connect_request(task* builder_t) {
         if (strcmp(box, boxes[i].box_name) == 0) {
             builder->user_type = OP_CODE_PUB;
             builder->session_id = pipe;
-            builder->pipe_path = client_name;
+            strcpy(builder->pipe_path, client_name);
             return_value = 0;
             if (write(pipe, &return_value, sizeof(int)) == 0) {
                 close(pipe);
@@ -119,7 +117,7 @@ void sub_connect_request(task* builder_t) {
             if (strcmp(box, boxes[i].box_name) == 0) {
                 builder_t->user_type = OP_CODE_LOGIN_SUB;
                 builder_t->session_id = pipe;
-                builder_t->pipe_path = client_name;
+                strcpy(builder->pipe_path, client_name);
                 return_value = 0;
                 if (write(pipe, &return_value, sizeof(int)) == 0) {
                     close(pipe);
@@ -259,55 +257,55 @@ void box_remove_request(task* builder_t){
         }
     }
 }
-/*
-void box_list_request(task* task_t){
+
+static int list_box_aux(const void* a, const void* b){
+    return (int)strcmp(((mail_box *)a)->box_name, ((mail_box *)b)->box_name);
+}
+
+void list_box_request(task* builder_t){
     int pipe;
     char client_name[MAX_CLIENT_NAME];
     uint8_t op_code = OP_CODE_LIST_BOX;
-    memcpy(client_name, task_t->buffer + 1, MAX_CLIENT_NAME);
+    memcpy(client_name, builder_t->buffer + 1, MAX_CLIENT_NAME);
     pipe = open(client_name, O_WRONLY);
 
-    // check if there are any boxes
     if(current_boxes == 0){
         char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char)];
         memcpy(response, &op_code, sizeof(uint8_t));
-        memcpy(response + 1, 1, 1 * sizeof(uint8_t));
+        memcpy(response + 1, &(uint8_t){1}, sizeof(uint8_t));
         memset(response + 2, '\0', MAX_BOXES * sizeof(char));
 
-        if (write(pipe, &response, sizeof(response)) == -1) {
-            close(pipe);
-            exit(EXIT_FAILURE);
+        if (write(pipe, response, sizeof(response)) == -1) {
+            perror("Failed to write to the pipe");
+            return;
         }
     }
     else {
-        // sort the boxes
-        qsort(boxes, current_boxes, sizeof(mail_box), box_list_aux);
-        char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char) 
-                + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t)];
-        
-        for(int i=0; i < current_boxes; i++){
+        qsort(boxes, (size_t)current_boxes, sizeof(mail_box), list_box_aux);  //sort the boxes
+
+        for(int i = 0; i < current_boxes; i++) {
+            char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char) 
+            + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t)];
+
             memcpy(response, &op_code, sizeof(uint8_t));
-            memcpy(response + 1, &boxes[i].last, 1 * sizeof(uint8_t));
+            memcpy(response + 1, &(boxes[i].last), sizeof(uint8_t));
             memset(response + 2, '\0', MAX_BOXES * sizeof(char));
             memcpy(response + 2, boxes[i].box_name, strlen(boxes[i].box_name) * sizeof(char));
-            memcpy(response + 2 + MAX_BOXES, boxes[i].box_size, sizeof(uint64_t));
-            memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t), boxes[i].num_publishers, sizeof(uint64_t));
-            memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t) + sizeof(uint64_t), boxes[i].num_subscribers, sizeof(uint64_t));
+            memcpy(response + 2 + MAX_BOXES, &boxes[i].box_size, sizeof(uint64_t));
+            memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t), &boxes[i].num_publishers, sizeof(uint64_t));
+            memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t) + sizeof(uint64_t), &boxes[i].num_subscribers, sizeof(uint64_t));
 
-            if (write(pipe, &response, sizeof(response)) == -1) {
-		        exit(EXIT_FAILURE);
-	        }
-
-            //memset(response, 0, strlen(response));
+            if (write(pipe, response, sizeof(response)) == -1) {
+                perror("Failed to write to the pipe");
+                return;
+            }
         }
     }
+    close(pipe);
 }
 
-static int box_list_aux(const void* a, const void* b){
-  return strcmp(((mail_box *)a)->box_name, ((mail_box *)b)->box_name);
-}
 
-*/
+
 
 void *task_handler(void *builder_v){
     task *builder_t = (task*) builder_v;

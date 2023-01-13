@@ -9,84 +9,117 @@
 #include <stdio.h>
 #include "../utils/lib.h"
 
-int server_pipe;
 int session_id;
+int pub_pipe;
 char pipe_file[PIPE_PATH_MAX_SIZE];
+bool session_active;
 
-int start_server_connection(char const *server_pipe_path, char const *pipe_path, char const *box_name) {
+void sig_handler(int signo) {
+    if (signo == SIGINT) {
+        session_active = false;
+    }
+}
+
+int start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
 
 	/* Create client pipe */
-	if (unlink(pipe_path) == -1 && errno != ENOENT) {
-		return -1;
-	}
-	if (mkfifo(pipe_path, 0640) == -1) {
-		return -1;
-	}
-
-	/* Open server pipe */
-	if ((server_pipe = open(server_pipe_path, O_WRONLY)) == -1) {
-		return -1;
-	}
+	//strcpy(client_pipe_file, pipe_path);
 
 	/* Send request to server */
 	task task_op;
 	task_op.opcode = OP_CODE_LOGIN_PUB;
 	strcpy(task_op.pipe_path, pipe_path);
     strcpy(task_op.box_name, box_name);
-    task_op.user_type = OP_CODE_PUB;
+    
 	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
 		return -1;
 	}
-    return 0;
+    printf("SSC : 2\n");
+    int server_ret;
+
+
+    printf("SSC : 4\n");   
+    if (read(server_pipe, &server_ret, sizeof(server_ret)) == -1){
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }  
+    //if read was successful returns 0, if it was an error returns -1
+    return server_ret;
 }
 
 
 
 int main(int argc, char **argv) {
 
-    
+
 	if (argc != 4){
 		printf("The number of arguments is invalid.\n");
 		printf("The correct usage is: pub <register_pipe_name> <pipe_name> <box_name>\n");
-		return -1;
+		exit(EXIT_FAILURE);
 	} 
+    
     char *register_pipe_name = argv[1];
     char *pipe_name = argv[2];
     char *box_name = argv[3];
 
-    server_pipe = open(register_pipe_name, O_RDONLY);
-    
-    // Creates a pipe and verifies if already exists
-    if (mkfifo(pipe_name, 0640) == -1 && errno == EEXIST){
-        fprintf(stderr, "Named Pipe already exists.");
-        return -1;
+    if (unlink(pipe_name) == -1 && errno != ENOENT) {
+		return -1;
+	}
+
+    if (strlen(box_name) > PATH_MAX_SIZE || strlen(pipe_name) > PIPE_PATH_MAX_SIZE){
+        fprintf(stderr, "The arguments surpassed the maximum size allowed\n");
+        exit(EXIT_FAILURE);
     }
+    
+    if (mkfifo(pipe_name, 0640) == -1) {
+        fprintf(stderr, "Pipe already exists /n");
+		exit(EXIT_FAILURE);
+	}
     fprintf(stderr, "usage: pub %s %s %s\n", register_pipe_name, pipe_name, box_name);
 
 
-    //O PIPE SÓ VAI DESBLOQUEAR QUANDO FOR FEITO OPEN ONDE?
-
-
-    if(start_server_connection(register_pipe_name, pipe_name, box_name) != 0){
-        return -1;
+    int server_pipe;
+    server_pipe = open(register_pipe_name, O_RDWR);
+    if (server_pipe == -1) {
+        fprintf(stderr, "Failed to open server pipe/n");
+        exit(EXIT_FAILURE);
     }
-    //ONDE MANDO O OP CODE OU COMO LEIO O OP CODE, SEMPRE Q ESCREVO UMA MENSAGEM MANDO UM OPCODE?-->PERGUNTAR AO STOR
+
+    printf("1\n");
+    if(start_server_connection(server_pipe, pipe_name, box_name) == -1){
+        fprintf(stderr, "Failed to connect to the server /n");
+        exit(EXIT_FAILURE);
+    }
+    printf("2\n");
     int pipe_fhandle = open(pipe_name, O_WRONLY);
-    
+    if (pipe_fhandle == -1) {
+            perror("Failed to open the named pipe");
+            exit(EXIT_FAILURE);
+        }
+    printf("3\n");
     char buffer[1], buffer2[1024];
 
     memset(buffer2,0,sizeof(buffer));
     int i = 0;
+    session_active = true;
+    while(session_active == true){
+       while(read(STDIN_FILENO, &buffer, 1) > 0 || strcmp(buffer,"\n") == 0){
+            printf("ainda estou a ler\n");
+            if (signal(SIGINT, sig_handler) == SIG_ERR) {
+                printf("\n can't catch SIGINT\n");
+                break;
+            }
+            memset(buffer2 + i,strlen(buffer), 1);
+            i++;
+       } 
+       printf("estou aqui\n");
+        write(pipe_fhandle, buffer2, sizeof(buffer2)); 
+    }
 
-    while(read(STDIN_FILENO, &buffer, 1) > 0)
-    {
-        if(strcmp(buffer, "\n")) break;
-        memset(buffer2 + i, strlen(buffer), 1);
-        i++;
-    } 
+    fprintf(stderr, "[INFO]: closing named pipe\n");
+    close(pipe_fhandle); 
+    unlink(pipe_name);
 
-    write(pipe_fhandle, buffer2, sizeof(buffer2)); 
-
-
-    return 0;
+    return -1;
 }

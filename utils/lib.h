@@ -41,7 +41,7 @@ enum{
 };
 
 typedef struct{
-    char *pipe_path;                        // Pointer to piper path name
+    char pipe_path[PIPE_PATH_MAX_SIZE];                        // Pointer to piper path name
     char opcode;                            //Type of task, deffined by the OP_CODE
 	int session_id;
 	char box_name[32];
