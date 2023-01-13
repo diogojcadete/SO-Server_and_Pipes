@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 	if (argc != 4){
 		printf("The number of arguments is invalid.\n");
 		printf("The correct usage is: pub <register_pipe_name> <pipe_name> <box_name>\n");
-		exit(EXIT_FAILURE);
+		return -1;
 	} 
     char *register_pipe_name = argv[1];
     char *pipe_name = argv[2];
@@ -56,9 +56,11 @@ int main(int argc, char **argv) {
 
     server_pipe = open(register_pipe_name, O_RDONLY);
     
-    if (mkfifo(pipe_name, 0777) == -1) {
-		exit(EXIT_FAILURE);
-	}
+    // Creates a pipe and verifies if already exists
+    if (mkfifo(pipe_name, 0640) == -1 && errno == EEXIST){
+        fprintf(stderr, "Named Pipe already exists.");
+        return -1;
+    }
     fprintf(stderr, "usage: pub %s %s %s\n", register_pipe_name, pipe_name, box_name);
 
 
