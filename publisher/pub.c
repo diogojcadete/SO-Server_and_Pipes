@@ -20,7 +20,7 @@ void sig_handler(int signo) {
     }
 }
 
-int start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
+void start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
 
 	/* Create client pipe */
 	//strcpy(client_pipe_file, pipe_path);
@@ -30,22 +30,13 @@ int start_server_connection(int server_pipe, char const * pipe_path, char const 
 	task_op.opcode = OP_CODE_LOGIN_PUB;
 	strcpy(task_op.pipe_path, pipe_path);
     strcpy(task_op.box_name, box_name);
+    printf("SSC : 1\n");
     
 	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-		return -1;
+		exit(EXIT_FAILURE);
 	}
     printf("SSC : 2\n");
-    int server_ret;
-
-
-    printf("SSC : 4\n");   
-    if (read(server_pipe, &server_ret, sizeof(server_ret)) == -1){
-        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-        return -1;
-    }  
-    //if read was successful returns 0, if it was an error returns -1
-    return server_ret;
 }
 
 
@@ -80,21 +71,18 @@ int main(int argc, char **argv) {
 
 
     int server_pipe;
-    server_pipe = open(register_pipe_name, O_RDWR);
+    server_pipe = open(register_pipe_name, O_WRONLY);
     if (server_pipe == -1) {
         fprintf(stderr, "Failed to open server pipe/n");
         exit(EXIT_FAILURE);
     }
 
     printf("1\n");
-    if(start_server_connection(server_pipe, pipe_name, box_name) == -1){
-        fprintf(stderr, "Failed to connect to the server /n");
-        exit(EXIT_FAILURE);
-    }
+    start_server_connection(server_pipe, pipe_name, box_name);
     printf("2\n");
     int pipe_fhandle = open(pipe_name, O_WRONLY);
     if (pipe_fhandle == -1) {
-            perror("Failed to open the named pipe");
+            fprintf(stderr, "Failed to open the named pipe");
             exit(EXIT_FAILURE);
         }
     printf("3\n");

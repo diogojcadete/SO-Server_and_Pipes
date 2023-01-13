@@ -269,24 +269,26 @@ void list_box_request(task* builder_t){
     memcpy(client_name, builder_t->buffer + 1, MAX_CLIENT_NAME);
     pipe = open(client_name, O_WRONLY);
 
+    // Check if there are any mailboxes
     if(current_boxes == 0){
         char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char)];
         memcpy(response, &op_code, sizeof(uint8_t));
         memcpy(response + 1, &(uint8_t){1}, sizeof(uint8_t));
         memset(response + 2, '\0', MAX_BOXES * sizeof(char));
 
+        // Write to the pipe
         if (write(pipe, response, sizeof(response)) == -1) {
             perror("Failed to write to the pipe");
             return;
         }
     }
     else {
-        qsort(boxes, (size_t)current_boxes, sizeof(mail_box), list_box_aux);  //sort the boxes
+        // Sort the boxes
+        qsort(boxes, (size_t)current_boxes, sizeof(mail_box), list_box_aux);
 
+        // Iterate through the boxes and write the information to the pipe
         for(int i = 0; i < current_boxes; i++) {
-            char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char) 
-            + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t)];
-
+            char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t)];
             memcpy(response, &op_code, sizeof(uint8_t));
             memcpy(response + 1, &(boxes[i].last), sizeof(uint8_t));
             memset(response + 2, '\0', MAX_BOXES * sizeof(char));
@@ -295,31 +297,31 @@ void list_box_request(task* builder_t){
             memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t), &boxes[i].num_publishers, sizeof(uint64_t));
             memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t) + sizeof(uint64_t), &boxes[i].num_subscribers, sizeof(uint64_t));
 
+            // Write to the pipe
             if (write(pipe, response, sizeof(response)) == -1) {
                 perror("Failed to write to the pipe");
                 return;
             }
         }
     }
+    // Close the pipe
     close(pipe);
 }
-
 
 void *task_handler(void *builder_v){
     task *builder_t = (task*) builder_v;
 
-    char op_code = '\0';
     while(true){
         pthread_mutex_lock(&builder_t->lock);
         while (builder_t->not_building) {
             pthread_cond_wait(&builder_t->flag, &builder_t->lock);
         }
         builder_t->not_building = false;
-        if (memcpy(&op_code, &builder_t->buffer, sizeof(char)) == NULL) {
+        if (memcpy(&builder_t->opcode, &builder_t->buffer, sizeof(char)) == NULL) {
             perror("memcpy failed");
             exit(EXIT_FAILURE);
         }
-        switch (op_code) {
+        switch (builder_t->opcode) {
         case OP_CODE_LOGIN_PUB:
             pub_connect_request(builder_t);
         case OP_CODE_LOGIN_SUB:
@@ -439,7 +441,6 @@ int main(int argc, char **argv) {
 	if (unlink(pipe_name) != 0) {
 		exit(EXIT_FAILURE);
 	}
-
 
 	return 0;
 }
