@@ -38,7 +38,6 @@ int init_server() {
         perror("malloc failed");
         return -1;
     }
-	print("BOB");
     return 0;
     
 }
