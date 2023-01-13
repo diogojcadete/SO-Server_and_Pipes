@@ -305,8 +305,6 @@ void list_box_request(task* builder_t){
 }
 
 
-
-
 void *task_handler(void *builder_v){
     task *builder_t = (task*) builder_v;
 
@@ -330,10 +328,8 @@ void *task_handler(void *builder_v){
             box_create_request(builder_t);
         case OP_CODE_REMOVE_BOX:
             box_remove_request(builder_t);
-            /*
-        case LIST_BOXES_REQUEST:
-            case_list_box(builder_t);
-            */
+        case OP_CODE_LIST_BOX:
+            list_box_request(builder_t);
         }
         builder_t->not_building = true;
         pthread_mutex_unlock(&builder_t->lock);
