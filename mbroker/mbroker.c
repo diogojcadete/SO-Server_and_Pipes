@@ -63,7 +63,8 @@ int pub_connect_request(task* builder_t) {
             else{
                 return 0;
             }    
-    }
+        }
+    }    
 
      return -1;  
 }
@@ -71,7 +72,7 @@ int pub_connect_request(task* builder_t) {
 void sub_connect_request(task* builder_t) {
    for (int i = 0; i < current_boxes; i++) {
         if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
-            strcpy(boxes[i].subs_array_pipe_path[boxes[i].num_subscribers], builder_t->pipe_path);
+            strcpy(boxes[i].subs_array_pipe_path[boxes[i].num_subscribers], (char *)builder_t->pipe_path);
             boxes[i].num_subscribers ++;
         }
    } 
@@ -79,21 +80,18 @@ void sub_connect_request(task* builder_t) {
    message_sub.opcode = OP_CODE_READ;
    char buffer_box[MESSAGE_MAX_SIZE];
     int tfs_fd;
-    tfs_fd = tfs_open(&task_t->box_name, TFS_O_APPEND);
-    if(fd == -1){
+    tfs_fd = tfs_open(&builder_t->box_name, TFS_O_APPEND);
+    if(tfs_fd == -1){
         return NULL;
     }
     ssize_t bytes_read_box;
     bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
-    if(bytes_read + bytes_read_box>1024){
-        break;
-    }
-    strcpy(new_message.message, buffer_box);
+    strcpy(message_sub.message, buffer_box);
     int sub_pipe;
     if(sub_pipe = open(builder_t->pipe_path, O_WRONLY)==-1){
         exit(EXIT_FAILURE);
     }
-    if(write(sub_pipe, &new_message, sizeof(message)) == -1){
+    if(write(sub_pipe, &message_sub, sizeof(message)) == -1){
         exit(EXIT_FAILURE);
     }
     close(sub_pipe);
@@ -383,11 +381,11 @@ int main(int argc, char **argv) {
         case OP_CODE_WRITE:
             int pipe_fd,tfs_fd;
             char buffer[FILE_MAX_SIZE], buffer_box[FILE_MAX_SIZE];
-            if ((pipe_fd = open(&task_op->pipe_path, O_RDONLY)) == -1) {
+            if ((pipe_fd = open(task_op.pipe_path, O_RDONLY)) == -1) {
 		        exit(EXIT_FAILURE);
 	        }
-            tfs_fd = tfs_open(&task_t->box_name, TFS_O_APPEND);
-            if(fd == -1){
+            tfs_fd = tfs_open(task_op.pipe_path, TFS_O_APPEND);
+            if(tfs_fd == -1){
                 return NULL;
             }
             ssize_t bytes_read_box,bytes_read;
@@ -405,7 +403,7 @@ int main(int argc, char **argv) {
                 }
             }
             close(pipe_fd);
-            for(int i = 0, i< current_boxes; i++){
+            for(int i = 0; i< current_boxes; i++){
                 if(strcmp(task_op.box_name, boxes[i].box_name) == 0){
                     for(int j = 0; j< boxes[i].num_subscribers; j++){
                         message new_message;
@@ -420,18 +418,17 @@ int main(int argc, char **argv) {
                         if(write(sub_pipe, &new_message, sizeof(message)) == -1){
                             exit(EXIT_FAILURE);
                         }
-
+                        close(sub_pipe);
                     }
                 }
             }
-            close(sub_pipe);
             tfs_close(tfs_fd);
 
 
         }
         if (signal(SIGINT, mbroker_exit) == SIG_ERR){
             pcq_destroy(task_queue);
-            free(queue);
+            free(task_queue);
             
             close(server_pipe);
             unlink(pipe_name);
