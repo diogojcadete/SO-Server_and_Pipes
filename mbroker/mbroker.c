@@ -17,15 +17,6 @@
 #define MAX_QUEUE_SIZE 1024
 #define MAX_SUBS 1024
 
-typedef struct{
-    char *box_name;
-    uint8_t last;
-    uint64_t box_size;
-    uint64_t num_publishers;
-    uint64_t num_subscribers;
-    char subs_array_pipe_path[1024];
-}mail_box;
-
 uint32_t number_max_sessions;
 int current_boxes = 0;
 
@@ -51,6 +42,17 @@ int init_server() {
 	return 0;
 }
 
+static void end_mbroker(int sig) {
+    if (sig == SIGINT) {
+        fprintf(stdout, "\nEnded the server");
+        return; // Resume execution at point of interruption
+    }
+}
+
+char task_error_box_to_str(task builder_t){
+    return ("%d|%d|%s", builder_t.opcode, builder_t.return_value, builder_t.error);
+}
+
 task string_to_task(char* building) {
     task task_op;
     memset(task_op.pipe_path, 0, sizeof(task_op.pipe_path));
@@ -60,57 +62,129 @@ task string_to_task(char* building) {
 }
 
 
-int pub_connect_request(task* builder_t) {
+void pub_connect_request(task* builder_t) {
 
+    int pipe;
+    pipe = open(builder_t->pipe_path, O_RDONLY);
+    if (pipe == -1){
+        exit(EXIT_FAILURE);
+    }
     // Check if there is already a publisher connected to the same mailbox
+    int server_res = -1;
     for (int i = 0; i < current_boxes; i++) {
         if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
             if(boxes[i].num_publishers == 1){
-                return -1;
+                if(write(pipe, &server_res, sizeof(int)) < 0){
+                    exit(EXIT_FAILURE);
+                }
             }
             else{
-                return 0;
+                char buffer[MESSAGE_MAX_SIZE];
+                for(;;){
+                    task task_op;
+                    char pub_wr_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
+                    ssize_t ret = read(pipe, &pub_wr_request, MAX_REQUEST_SIZE);
+                    
+                    task_op = string_to_task(pub_wr_request);
+
+                    int box_fhandle = tfs_open(builder_t->box_name, TFS_O_APPEND);
+                    if(box_fhandle == -1){
+                       exit(EXIT_FAILURE);
+                    }
+                    ssize_t bytes_read = tfs_read(box_fhandle,buffer, sizeof(buffer));
+                    if(bytes_read<0){
+                        exit(EXIT_FAILURE);
+                    }
+                    if(bytes_read + strlen(task_op.message)>1024){
+                        break;
+                    }
+                    else{
+                        ssize_t wr = tfs_write(box_fhandle, task_op.message, strlen(task_op.message));
+                        if (wr == -1){
+                            exit(EXIT_FAILURE);
+                        }
+                         tfs_close(box_fhandle);
+                    }
+
+                }
             }    
         }
     }    
 
-     return -1;  
-}
+    if(write(pipe, &server_res, sizeof(int)) < 0){
+       exit(EXIT_FAILURE);
+    }
+    close(pipe);
+}  
+
 
 void sub_connect_request(task* builder_t) {
-   for (int i = 0; i < current_boxes; i++) {
-        if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
-           strcpy(&boxes[i].subs_array_pipe_path[boxes[i].num_subscribers], builder_t->pipe_path);
-            boxes[i].num_subscribers ++;
-        }
-   } 
-   message message_sub;
-   message_sub.opcode = OP_CODE_READ;
-   char buffer_box[MESSAGE_MAX_SIZE];
-    int tfs_fd;
-    tfs_fd = tfs_open(builder_t->box_name, TFS_O_APPEND);
-    if(tfs_fd == -1){
-        exit(EXIT_FAILURE);
-    }
-    ssize_t bytes_read_box;
-    bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
-    strcpy(message_sub.message, buffer_box);
     int sub_pipe;
     if((sub_pipe = open(builder_t->pipe_path, O_WRONLY))==-1){
         exit(EXIT_FAILURE);
     }
-    if(write(sub_pipe, &message_sub, sizeof(message)) == -1){
-        exit(EXIT_FAILURE);
-    }
+   for (int i = 0; i < current_boxes; i++) {
+        if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
+           strcpy(&boxes[i].subs_array_pipe_path[boxes[i].num_subscribers], builder_t->pipe_path);
+            boxes[i].num_subscribers ++;    
+            char buffer_box[MESSAGE_MAX_SIZE];
+            int tfs_fd;
+            tfs_fd = tfs_open(builder_t->box_name, TFS_O_APPEND);
+            if(tfs_fd == -1){
+                exit(EXIT_FAILURE);
+            }
+            char sub_rd_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
+            ssize_t bytes_read_box;
+            bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
+            if(bytes_read_box<0){
+                exit(EXIT_FAILURE);
+            }
+            for(;;){
+                char sub_rd_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
+                ssize_t bytes_read_box;
+                bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
+                if(bytes_read_box<0){
+                    exit(EXIT_FAILURE);
+                }
+                int sub_pipe;
+                if((sub_pipe = open(builder_t->pipe_path, O_WRONLY))==-1){
+                    exit(EXIT_FAILURE);
+                }
+                task task_op;
+                task_op.opcode = OP_CODE_READ;
+                strcpy(task_op.message, buffer_box);
+                if(write(sub_pipe, &task_op, sizeof(task_op)) == -1){
+                    close(sub_pipe);
+                    exit(EXIT_FAILURE);
+                }
+            } 
+        }
+        else{
+            int server_return = 1;
+            if(write(sub_pipe,&server_return, sizeof(server_return)));
+            
+        }
+   } 
     close(sub_pipe);
 
 }
 
-int box_create_request(task* builder_t) {
+void box_create_request(task* builder_t) {
     // Check if the box already exists
+
+    int pipe_fd = open(builder_t->pipe_path, O_WRONLY);
+    char res_create[sizeof(uint8_t) + 2 + sizeof(int32_t) + sizeof(char)*MAX_ERROR_SIZE];
     for (int i = 0; i < current_boxes; i++) {
         if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
-            return -1;
+            task task_op;
+            task_op.opcode = OP_CODE_CREATE_BOX_RESPONSE;
+            task_op.return_value = -1;
+            strcpy(task_op.error,"THE BOX ALREADY EXISTS");
+            strcpy(res_create, task_error_box_to_str(task_op));
+            ssize_t bytes_written = write(pipe_fd, &res_create, sizeof(res_create));
+            if(bytes_written == -1){
+                exit(EXIT_FAILURE);
+            }
         }
         
     }
@@ -129,72 +203,51 @@ int box_create_request(task* builder_t) {
         .subs_array_pipe_path = {"0"}
     };
 
+    boxes[current_boxes-1].last = 0;
     boxes[current_boxes] = new_box;
     current_boxes ++;
 
-    // If the function reaches here, it means that there are no free boxes available
-    return_value = -0;
-    if (write(pipe, &return_value, sizeof(int)) == 0) {
-        close(pipe);
-        return;
-    }
-
     // Close the pipe
-    if(close(pipe) == -1) {
+    if(close(pipe_fd) == -1) {
         perror("Error closing pipe");
     }
 }
 
-void box_remove_request(task* builder_t){
-    int return_value;
-    int pipe;
-    char client_name[MAX_CLIENT_NAME];
-    char box_name[MAX_BOXES];
-    // Copy the client name from the buffer into the client_name variable
-    memcpy(client_name, builder_t->buffer + 1, MAX_CLIENT_NAME);
-    // Copy the box name from the buffer into the box_name variable
-    memcpy(box_name, builder_t->buffer + 1 + MAX_CLIENT_NAME, MAX_BOXES);
-    // Open the pipe for writing
-    pipe = open(client_name, O_WRONLY);
-    // Check if the box name provided is a valid box
-    for (int i=0; i < MAX_BOXES; i++){
-        if (strcmp(box_name, boxes[i].box_name) != 0){
-            // If the box name is not valid, return -1 and close the pipe
-            return_value = -1;
-            if (write(pipe, &return_value, sizeof(int)) == 0){
-                close(pipe);
-                return;
-            }   
+void box_remove_request(task builder_t){
+
+    int pipe_fd = open(builder_t->pipe_path, O_WRONLY);
+    char res_remove[sizeof(uint8_t) + 2 + sizeof(int32_t) + sizeof(char) * MAX_ERROR_SIZE];
+
+    if(current_boxes == 0){
+        task task_op;
+        task_op.opcode = OP_CODE_CREATE_BOX_RESPONSE;
+        task_op.return_value = -1;
+        strcpy(task_op.error,"THERE AREN'T ANY BOXES");
+        strcpy(res_create, task_error_box_to_str(task_op));
+        ssize_t bytes_written = write(pipe_fd, &res_create, sizeof(res_create));
+        if(bytes_written == -1){
+            exit(EXIT_FAILURE);
         }
     }
-    // Delete the box from the file system
-    tfs_unlink(box_name);
-    // Remove the box from the boxes array
-    for (int i=0; i < MAX_BOXES; i++){
-        if(strcmp(boxes[i].box_name, box_name)){
-            // Clear the box's information
-            strcpy(boxes[i].box_name, box_name);
-            boxes[i].box_size = 0;
-            boxes[i].is_free = true;
-            boxes[i].last = 0;
-            boxes[i].num_publishers = 0;
-            boxes[i].num_subscribers = 0;
-            boxes[i-1].last = 1;
-            current_boxes--;
-            // Return 0 on success
-            return_value = 0;
-            if (write(pipe, &return_value, sizeof(int)) == 0){
-                close(pipe);
-                return;
+    else{
+        int index;
+        for(int i = 0; i< current_boxes; i++){
+            if(strcmp(boxes[i].box_name, box_name) == 0){
+                index = i;
+                break;
             }
         }
-    // If the box was not removed, return -1
-    return_value = -1;
-    if (write(pipe, &return_value, sizeof(int)) == 0){
-        close(pipe);
-        return;
+        for(int j = index; j < current_boxes -1 ; j++){
+            boxes[j] = boxes[j+1];
         }
     }
+
+    if(tfs_unlink(box_name)==-1){
+        exit(EXIT_FAILURE);
+    }
+
+    current_boxes--;
+    
 }
 /*
 void case_list_box(task* builder_t){
@@ -253,12 +306,7 @@ void *task_handler(){
         }
         switch (task_t->opcode) {
             case OP_CODE_LOGIN_PUB:
-                if(pub_connect_request(task_t) == -1){
-                    int server_res = -1;
-                    if(write(pipe, &server_res, sizeof(int)) < 0){
-                        exit(EXIT_FAILURE);
-                    }
-                }
+                pub_connect_request(task_t);
                 break;              
             case OP_CODE_LOGIN_SUB:
                 sub_connect_request(task_t);
@@ -352,7 +400,6 @@ int main(int argc, char **argv) {
         if(server_read<0){
             break;
         }
-        if()
         task_op = string_to_task(request);
         switch (task_op.opcode)
         {
@@ -364,57 +411,11 @@ int main(int argc, char **argv) {
             printf("5\n");
             pcq_enqueue(task_queue, (void *) &task_op);
             break;
-        
 
-        case OP_CODE_WRITE:
-            int pipe_fd,tfs_fd;
-            char buffer[FILE_MAX_SIZE], buffer_box[FILE_MAX_SIZE];
-            if ((pipe_fd = open(task_op.pipe_path, O_RDONLY)) == -1) {
-		        exit(EXIT_FAILURE);
-	        }
-            tfs_fd = tfs_open(task_op.pipe_path, TFS_O_APPEND);
-            if(tfs_fd == -1){
-                return NULL;
-            }
-            ssize_t bytes_read_box,bytes_read;
-            bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
-            bytes_read = read(pipe_fd, buffer, sizeof(buffer));
-            if(bytes_read + bytes_read_box>1024){
-                break;
-            }
-            else{
-                ssize_t bytes_written = tfs_write(tfs_fd, buffer, (size_t)bytes_read);
-                if(bytes_written < 0){
-                    close(pipe_fd);
-                    tfs_close(tfs_fd);
-                    return NULL;
-                }
-            }
-            close(pipe_fd);
-            for(int i = 0; i< current_boxes; i++){
-                if(strcmp(task_op.box_name, boxes[i].box_name) == 0){
-                    for(int j = 0; j< boxes[i].num_subscribers; j++){
-                        message new_message;
-                        char buffer_sub[1024];
-                        new_message.opcode = OP_CODE_READ;
-                        strcpy(buffer_sub,buffer);
-                        strcpy(new_message.message, buffer_sub);
-                        int sub_pipe;
-                        if((sub_pipe = open(boxes[i].subs_array_pipe_path[j], O_WRONLY))==-1){
-                            exit(EXIT_FAILURE);
-                        }
-                        if(write(sub_pipe, &new_message, sizeof(message)) == -1){
-                            exit(EXIT_FAILURE);
-                        }
-                        close(sub_pipe);
-                    }
-                }
-            }
-            tfs_close(tfs_fd);
-
-
+        default:
+            break;    
         }
-        if (signal(SIGINT, mbroker_exit) == SIG_ERR){
+        if (signal(SIGINT, end_mbroker) == SIG_ERR){
             pcq_destroy(task_queue);
             free(task_queue);
             

@@ -42,6 +42,8 @@ void send_msg_server(int pub_pipe, char const * pipe_path, char const *message){
     
 	if (write(pub_pipe, &pub_wr_request, sizeof(pub_wr_request)) == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        close(pub_pipe);
+        unlink(pipe_path);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -63,6 +65,8 @@ int start_server_connection(int server_pipe, char const * pipe_path, char const 
 
 	if (write(server_pipe, &pub_request, sizeof(pub_request)) == -1) {
         fprintf(stderr, "failed to read from the server\n");
+        close(pub_pipe);
+        unlink(pipe_path);
 		exit(EXIT_FAILURE);
 	}
 
@@ -75,6 +79,7 @@ int start_server_connection(int server_pipe, char const * pipe_path, char const 
         fprintf(stderr, "failed to read from the server\n");
         return -1;
     }
+    close(pub_pipe);
     return server_return;
     
 }

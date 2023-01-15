@@ -28,7 +28,7 @@ void sig_handler(int signo) {
     }
 }
 
-void start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
+int start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
 
 	/* Create client pipe */
 	//strcpy(client_pipe_file, pipe_path);
@@ -48,7 +48,7 @@ void start_server_connection(int server_pipe, char const * pipe_path, char const
 		exit(EXIT_FAILURE);
 	}
     
-     int sub_pipe = open(pipe_path, O_RDONLY);
+    int sub_pipe = open(pipe_path, O_RDONLY);
     if (sub_pipe == -1){
         return -1;
     }
@@ -57,6 +57,7 @@ void start_server_connection(int server_pipe, char const * pipe_path, char const
         fprintf(stderr, "failed to read from the server\n");
         return -1;
     }
+    close(sub_pipe);
     return server_return;
 }
 
@@ -83,8 +84,10 @@ int main(int argc, char **argv) {
     }
     /* check if the open function call was successful */
     /* open server pipe with O_WRONLY flag for writing */
-
-    start_server_connection(server_fd, sub_pipe, box_name);
+    
+    if(start_server_connection(server_fd, sub_pipe, box_name) == -1){
+        exit(EXIT_FAILURE);
+    }
 
     int sub_fd = open(sub_pipe, O_RDONLY);
 
@@ -92,21 +95,22 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    message message_received;
+    task task_op;
     ssize_t bytes_read,bytes_written;
     session_active = true;
+    char sub_res[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
     printf("session is now open\n");
     while(session_active == true){
         printf("awaiting data...\n");
-       while((bytes_read = read(sub_fd, &message_received, sizeof(message)))>0){
-            bytes_written = write(STDOUT_FILENO, &message_received.message, (size_t)bytes_read);
+       while((bytes_read = read(sub_fd, &sub_res, sizeof(message)))>0){
+            task new_task = string_to_task(sub_res);
+            bytes_written = write(STDOUT_FILENO, new_task.message, sizeof(new_task.message));
             if(bytes_written <0){
                 close(sub_fd);
                 close(server_fd);
                 unlink(sub_pipe);
                 exit(EXIT_FAILURE);
             }
-            message_received.opcode = OP_CODE_READ;
             if (signal(SIGINT, sig_handler) == SIG_ERR) {
                 printf("\n can't catch SIGINT\n");
                 close(sub_fd);
