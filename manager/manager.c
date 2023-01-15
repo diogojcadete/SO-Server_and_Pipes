@@ -15,23 +15,26 @@ int server_fd;
 int man_fd;
 
 char *task_to_string(task builder_t){
-    return ("%s|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    char* response = malloc(sizeof(char) * (MESSAGE_MAX_SIZE + 1));
+    snprintf(response, MESSAGE_MAX_SIZE, "%hhu|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    return response;
+
 }
 
 void start_server_connection(char const *server_pipe_path, char const *pipe_path, char const *request, char const *box_name) {
 
 	/* Create client pipe */
 	if (unlink(pipe_path) == -1 && errno != ENOENT) {
-		return -1;
+		exit(EXIT_FAILURE);
 	}
 	if (mkfifo(pipe_path, 0640) == -1) {
-		return -1;
+		exit(EXIT_FAILURE);
 	}
 	//strcpy(client_pipe_file, pipe_path);
 
 	/* Open server pipe */
 	if ((server_fd = open(server_pipe_path, O_WRONLY)) == -1) {
-		return -1;
+		exit(EXIT_FAILURE);
 	}
 
 	/* Send request to server */
@@ -50,10 +53,11 @@ void start_server_connection(char const *server_pipe_path, char const *pipe_path
         strncpy(task_op.box_name, box_name, MAX_BOX_NAME);
         strcpy(req_create,task_to_string(task_op));
         if (write(server_fd, &req_create, sizeof(req_create)) == -1) {
-		return -1;
+		exit(EXIT_FAILURE);
+        }
         if (read(man_fd, &res_create, sizeof(res_create)) == -1){
             fprintf(stderr, "failed to read from the server\n");
-            return -1;
+            exit(EXIT_FAILURE);
         }
         task new_task;
         new_task = string_to_task(res_create);
@@ -67,7 +71,6 @@ void start_server_connection(char const *server_pipe_path, char const *pipe_path
         }
 	}
 
-    }
     else if(strcmp(request,"remove") == 0){
         task_op.opcode = OP_CODE_REMOVE_BOX;
         strncpy(task_op.box_name, box_name, MAX_BOX_NAME);
@@ -96,11 +99,11 @@ void start_server_connection(char const *server_pipe_path, char const *pipe_path
         task_op.opcode = OP_CODE_LIST;
         if (write(server_fd, &req_list, sizeof(req_list)) == -1) {
             close(server_fd);
-		    return -1;
+		    exit(EXIT_FAILURE);
 	    }   
         if (read(man_fd, &res_list, sizeof(res_list)) == -1){
             fprintf(stderr, "failed to read from the server\n");
-            return -1;
+            exit(EXIT_FAILURE);
         }
         task new_task;
         new_task = string_to_task(res_list);

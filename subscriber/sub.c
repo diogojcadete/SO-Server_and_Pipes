@@ -16,7 +16,9 @@ int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
 char *task_to_string(task builder_t){
-    return ("%s|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    char* response = malloc(sizeof(char) * (MESSAGE_MAX_SIZE + 1));
+    snprintf(response, MESSAGE_MAX_SIZE,"%hhu|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    return response;
 }
 
 void sig_handler(int signo) {

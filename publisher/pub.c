@@ -9,18 +9,19 @@
 #include "../utils/lib.h"
 
 int session_id;
-int pub_pipe;
 char pipe_file[PIPE_PATH_MAX_SIZE];
 bool session_active;
 int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
-char wr_task_to_string(task builder_t, char *message){
-    return ("%s|%s", builder_t.opcode, builder_t.pipe_path, message);
+char *wr_task_to_string(task builder_t, char *message){
+    return ("%d|%s/%s", builder_t.opcode, builder_t.pipe_path, message);
 }
 
-char task_to_string(task builder_t){
-    return ("%s|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+char *task_to_string(task builder_t){
+    char* response = malloc(sizeof(char) * (MESSAGE_MAX_SIZE + 1));
+    snprintf(response, MESSAGE_MAX_SIZE,"%hhu|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    return response;
 }
 
 void sig_handler(int signo) {
@@ -65,7 +66,6 @@ int start_server_connection(int server_pipe, char const * pipe_path, char const 
 
 	if (write(server_pipe, &pub_request, sizeof(pub_request)) == -1) {
         fprintf(stderr, "failed to read from the server\n");
-        close(pub_pipe);
         unlink(pipe_path);
 		exit(EXIT_FAILURE);
 	}

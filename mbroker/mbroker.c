@@ -61,8 +61,6 @@ char* task_to_str(task builder_t){
     return result;
 }
 
-
-
 void pub_connect_request(task* builder_t) {
 
     int pipe;
@@ -120,7 +118,6 @@ void pub_connect_request(task* builder_t) {
     }
     close(pipe);
 }  
-
 
 void sub_connect_request(task* builder_t) {
     int sub_pipe;
@@ -249,54 +246,54 @@ void box_remove_request(task *builder_t){
     current_boxes--;
     
 }
-/*
-void case_list_box(task* builder_t){
-    int ret;
-    int pipe;
-    char client_name[MAX_CLIENT_NAME];
-    uint8_t op_code = OP_CODE_LIST_BOX;
-    memcpy(client_name, builder_t->buffer + 1, MAX_CLIENT_NAME);
-    pipe = open(client_name, O_WRONLY);
 
-    if(current_boxes == 0){
-        char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char)];
+static int box_list_boxes_aux(const void *a, const void *b) {
+    return strcmp(((mail_box *)a)->box_name, ((mail_box *)b)->box_name);
+}
+
+void box_list_boxes(task *builder_t) {
+    int client_pipe;
+    char client_name[FILE_NAME_MAX_SIZE];
+    uint8_t op_code = OP_CODE_LIST_BOXES_RESPONSE;
+
+    // treat request and opens client pipe
+    memcpy(client_name, builder_t->message, FILE_NAME_MAX_SIZE);
+    client_pipe = open(client_name, O_WRONLY);
+
+    if (current_boxes == 0) { 
+        uint8_t i = 0;
+        char response[sizeof(uint8_t) + sizeof(uint8_t)];
         memcpy(response, &op_code, sizeof(uint8_t));
-        memcpy(response + 1, 1, 1 * sizeof(uint8_t));
-        memset(response + 2, '\0', MAX_BOXES * sizeof(char));
-
-        if (write(pipe, &response, sizeof(response)) == -1) {
-		    return;
-	    }
-    }
-    else {
-        qsort(boxes, MAX_BOXES, sizeof(mail_box), myCompare); //sort the boxes
-        char response[sizeof(uint8_t) + sizeof(uint8_t) + MAX_BOXES * sizeof(char) 
-                + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t)];
-        
-        for(int i=0; i < current_boxes; i++){
-            memcpy(response, &op_code, sizeof(uint8_t));
-            memcpy(response + 1, boxes[i].last, 1 * sizeof(uint8_t));
-            memset(response + 2, '\0', MAX_BOXES * sizeof(char));
-            memcpy(response + 2, boxes[i].box_name, strlen(boxes[i].box_name) * sizeof(char));
-            memcpy(response + 2 + MAX_BOXES, boxes[i].box_size, sizeof(uint64_t));
-            memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t), boxes[i].num_publishers, sizeof(uint64_t));
-            memcpy(response + 2 + MAX_BOXES + sizeof(uint64_t) + sizeof(uint64_t), boxes[i].num_subscribers, sizeof(uint64_t));
-
-            if (write(pipe, &response, sizeof(response)) == -1) {
-		        return;
-	        }
-
-            //memset(response, 0, strlen(response));
+        memcpy(response + 1, &i, 1 * sizeof(uint8_t));
+        if (write(client_pipe, &response, sizeof(response)) > 0) {
+            close(client_pipe);
+        }
+    } 
+    
+    else { 
+        // if there are, sort the boxes
+        qsort(boxes, (size_t)current_boxes, sizeof(mail_box), box_list_boxes_aux); 
+        char response[sizeof(uint8_t) + sizeof(uint8_t) + current_boxes * (MAX_BOX_NAME * sizeof(char) + sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint64_t))];
+        memcpy(response, &op_code, sizeof(uint8_t));
+        memcpy(response + 1, &current_boxes, 1 * sizeof(uint8_t));
+        int offset = 2;
+        // for every existing box in the list, adds to the request
+        for (int i = 0; i < current_boxes; i++) {
+            memcpy(response + offset, boxes[i].box_name, strlen(boxes[i].box_name) * sizeof(char));
+            offset += strlen(boxes[i].box_name);
+            memcpy(response + offset, &boxes[i].box_size, sizeof(uint64_t));
+            offset += sizeof(uint64_t);
+            memcpy(response + offset, &boxes[i].num_publishers, sizeof(uint64_t));
+            offset += sizeof(uint64_t);
+            memcpy(response + offset, &boxes[i].num_subscribers, sizeof(uint64_t));
+            offset += sizeof(uint64_t);
+        }
+        // finally, write to pipe
+        if (write(client_pipe, &response, sizeof(response)) > 0) {
+            close(client_pipe);
         }
     }
 }
-*/
-/* Auxiliary functions for sorting the boxes
-static int myCompare(const void* a, const void* b){
-  return strcmp(((mail_box *)a)->box_name, ((mail_box *)b)->box_name);
-}
-*/
-
 
 void *task_handler(){
     while(true){
