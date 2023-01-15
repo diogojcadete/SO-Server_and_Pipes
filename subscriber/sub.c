@@ -16,7 +16,7 @@ int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
 char *task_to_string(task builder_t){
-    return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    return ("%s|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
 }
 
 void sig_handler(int signo) {
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     }
     /* check if the open function call was successful */
     /* open server pipe with O_WRONLY flag for writing */
-    
+
     if(start_server_connection(server_fd, sub_pipe, box_name) == -1){
         exit(EXIT_FAILURE);
     }

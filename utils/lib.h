@@ -67,27 +67,30 @@ task string_to_task(char* building) {
     memset(builder.box_name, 0, sizeof(builder.box_name));
     memset(builder.error, 0, sizeof(builder.error));
     memset(builder.message, 0, sizeof(builder.message));
-    sscanf(building, "%d|%s|%s", &builder.opcode);
+    sscanf(building, "%s|", &builder.opcode);
     switch(builder.opcode){
         case(OP_CODE_LOGIN_PUB):
         case(OP_CODE_LOGIN_SUB):
         case(OP_CODE_CREATE_BOX):
         case(OP_CODE_REMOVE_BOX):
-            sscanf(building, "%d|%s|%s", &builder.opcode, builder.pipe_path, builder.box_name);
+            sscanf(building, "%s|%s|%s", &builder.opcode, builder.pipe_path, builder.box_name);
             return builder;
         case(OP_CODE_CREATE_BOX_RESPONSE):
         case(OP_CODE_REMOVE_BOX_RESPONSE):
-            sscanf(building, "%d|%d|%s", &builder.opcode, &builder.return_value, builder.message);
+            sscanf(building, "%s|%d|%s", &builder.opcode, &builder.return_value, builder.message);
             return builder;
         case(OP_CODE_LIST):
-            sscanf(building, "%d|%s", &builder.opcode, builder.pipe_path);
+            sscanf(building, "%s|%s", &builder.opcode, builder.pipe_path);
             return builder;  
+          /**  
         case(OP_CODE_LIST_BOXES_RESPONSE):
-            sscanf(building, "%d|%d|%s|%llu|%llu|%llu", &builder.opcode, builder.last, builder.box_name, &builder.box_size, &builder.num_publishers, &builder.num_subscribers);
+            sscanf(building, "%s|%d|%s|%llu|%llu|%llu", &builder.opcode, builder.last, builder.box_name, &builder.box_size, &builder.num_publishers, &builder.num_subscribers);
             return builder;
+
+            */
         case(OP_CODE_WRITE):
         case(OP_CODE_READ):
-            sscanf(building, "%d|%s", &builder.opcode, builder.message);
+            sscanf(building, "%s|%s", &builder.opcode, builder.message);
             return builder;
     }
     exit(EXIT_FAILURE);

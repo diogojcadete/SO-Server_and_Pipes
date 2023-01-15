@@ -49,21 +49,18 @@ static void end_mbroker(int sig) {
     }
 }
 
-char *task_error_box_to_str(task builder_t){
-    return ("%d|%d|%s", builder_t.opcode, builder_t.return_value, builder_t.error);
+char* task_error_box_to_str(task builder_t){
+    char* result = malloc(sizeof(char) * (MESSAGE_MAX_SIZE + 1));
+    snprintf(result, MESSAGE_MAX_SIZE, "%hhu|%d|%s", builder_t.opcode, builder_t.return_value, builder_t.error);
+    return result;
 }
 
-char *task_to_str(task builder_t){
-    return ("%d|%s", builder_t.opcode, builder_t.message);
+char* task_to_str(task builder_t){
+    char* result = malloc(sizeof(char) * (MESSAGE_MAX_SIZE + 1));
+    snprintf(result, MESSAGE_MAX_SIZE, "%hhu|%s", builder_t.opcode, builder_t.message);
+    return result;
 }
 
-task string_to_task(char* building) {
-    task task_op;
-    memset(task_op.pipe_path, 0, sizeof(task_op.pipe_path));
-    memset(task_op.box_name, 0, sizeof(task_op.box_name));
-    sscanf(building, "%s|%s|%s", &task_op.opcode, task_op.pipe_path, task_op.box_name);
-    return task_op;
-}
 
 
 void pub_connect_request(task* builder_t) {
@@ -166,7 +163,6 @@ void sub_connect_request(task* builder_t) {
             
         }
    } 
-   print("BOB");
     close(sub_pipe);
 
 }
@@ -232,16 +228,18 @@ void box_remove_request(task *builder_t){
         }
     }
     else{
-        int index;
+        
         for(int i = 0; i< current_boxes; i++){
             if(strcmp(boxes[i].box_name, builder_t->box_name) == 0){
+                int index;
                 index = i;
+                for(int j = index; j < current_boxes -1 ; j++){
+                    boxes[j] = boxes[j+1];
+                }
                 break;
             }
         }
-        for(int j = index; j < current_boxes -1 ; j++){
-            boxes[j] = boxes[j+1];
-        }
+
     }
 
     if(tfs_unlink(builder_t->box_name)==-1){

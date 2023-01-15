@@ -15,7 +15,7 @@ int server_fd;
 int man_fd;
 
 char *task_to_string(task builder_t){
-    return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    return ("%s|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
 }
 
 void start_server_connection(char const *server_pipe_path, char const *pipe_path, char const *request, char const *box_name) {

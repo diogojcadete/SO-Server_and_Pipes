@@ -16,11 +16,11 @@ int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
 char wr_task_to_string(task builder_t, char *message){
-    return ("%d|%s", builder_t.opcode, builder_t.pipe_path, message);
+    return ("%s|%s", builder_t.opcode, builder_t.pipe_path, message);
 }
 
 char task_to_string(task builder_t){
-    return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+    return ("%s|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
 }
 
 void sig_handler(int signo) {
