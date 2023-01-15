@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 int pcq_create(pc_queue_t *queue, size_t capacity) {
     int result = 0;
 
@@ -48,6 +47,7 @@ int pcq_destroy(pc_queue_t *queue) {
 
 int pcq_enqueue(pc_queue_t *queue, void *elem) {
     // Acquire locks
+
     pthread_mutex_lock(&queue->pcq_current_size_lock);
     pthread_mutex_lock(&queue->pcq_tail_lock);
     pthread_mutex_lock(&queue->pcq_pusher_condvar_lock);
@@ -77,23 +77,25 @@ int pcq_enqueue(pc_queue_t *queue, void *elem) {
 
 
 void *pcq_dequeue(pc_queue_t *queue) {
-    void *elem;
-
-    pthread_mutex_lock(&queue->pcq_current_size_lock);
+    void *result;
+    pthread_mutex_lock(&queue->pcq_tail_lock);
     while (queue->pcq_current_size == 0) {
-        pthread_cond_wait(&queue->pcq_popper_condvar, &queue->pcq_current_size_lock);
+        pthread_cond_wait(&queue->pcq_popper_condvar, &queue->pcq_tail_lock);
     }
 
-    pthread_mutex_lock(&queue->pcq_tail_lock);
-    elem = queue->pcq_buffer[queue->pcq_tail];
-    queue->pcq_tail = (queue->pcq_tail + 1) % queue->pcq_capacity;
-    queue->pcq_current_size--;
-    pthread_mutex_unlock(&queue->pcq_tail_lock);
+    // Get the element at the head of the queue
+    result = queue->pcq_buffer[queue->pcq_head];
 
-    pthread_mutex_unlock(&queue->pcq_current_size_lock);
+    // Increase the head and decrease the size of the queue
+    queue->pcq_head = (queue->pcq_head + 1) % queue->pcq_capacity;
+    queue->pcq_current_size--;
+
+    // Notify waiting threads
     pthread_cond_signal(&queue->pcq_pusher_condvar);
 
-    return elem;
-}
+    // Release locks
+    pthread_mutex_unlock(&queue->pcq_tail_lock);
 
+    return result;
+}
 

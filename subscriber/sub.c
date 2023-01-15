@@ -12,43 +12,35 @@
 
 int num_messages;
 bool session_active;
-
+int global_pub_pipe;
+char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
 void sig_handler(int signo) {
     if (signo == SIGINT) {
         session_active = false;
         printf("\nSession closed. Number of messages received: %d\n", num_messages);
+        close(global_pub_pipe); 
+        unlink(global_pipe_name);
     }
 }
 
-int start_server_connection(char const *server_pipe_path, char const *pipe_path, char const *box_name) {
+void start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
 
 	/* Create client pipe */
-	if (unlink(pipe_path) == -1 && errno != ENOENT) {
-		return -1;
-	}
-	if (mkfifo(pipe_path, 0640) == -1) {
-		return -1;
-	}
 	//strcpy(client_pipe_file, pipe_path);
-
-	/* Open server pipe */
-    int server_fd;
-	if ((server_fd = open(server_pipe_path, O_WRONLY)) == -1) {
-		return -1;
-	}
 
 	/* Send request to server */
 	task task_op;
-    task_op.user_type = OP_CODE_SUBBSCRIBER;
 	task_op.opcode = OP_CODE_LOGIN_SUB;
 	strcpy(task_op.pipe_path, pipe_path);
     strcpy(task_op.box_name, box_name);
-	if (write(server_fd, &task_op, sizeof(task)) == -1) {
-        close(server_fd);
-		return -1;
+    printf("SSC : 1\n");
+    
+	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
 	}
-    return 0;
+    printf("SSC : 2\n");
 }
 
 
@@ -75,9 +67,7 @@ int main(int argc, char **argv) {
     /* check if the open function call was successful */
     /* open server pipe with O_WRONLY flag for writing */
 
-    if(start_server_connection(server_pipe, sub_pipe, box_name) == -1){
-        return -1;
-    }
+    start_server_connection(server_fd, sub_pipe, box_name);
 
     int sub_fd = open(sub_pipe, O_RDONLY);
 
@@ -85,25 +75,42 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    char buffer[MESSAGE_MAX_SIZE + sizeof(uint8_t)];
-
+    message message_received;
     ssize_t bytes_read,bytes_written;
+    session_active = true;
+    printf("session is now open\n");
     while(session_active == true){
-        if (signal(SIGINT, sig_handler) == SIG_ERR) {
-            printf("\n can't catch SIGINT\n");
-        }
-        bytes_read = read(sub_fd, buffer, sizeof(buffer));
-        bytes_written = write(STDOUT_FILENO, buffer, (size_t)bytes_read);
-        if (bytes_written < 0){
+        printf("awaiting data...\n");
+       while((bytes_read = read(sub_fd, &message_received, sizeof(message)))>0){
+            bytes_written = write(STDOUT_FILENO, &message_received.message, (size_t)bytes_read);
+            if(bytes_written <0){
+                close(sub_fd);
+                close(server_fd);
+                unlink(sub_pipe);
+                exit(EXIT_FAILURE);
+            }
+            message_received.opcode = OP_CODE_READ;
+            if (signal(SIGINT, sig_handler) == SIG_ERR) {
+                printf("\n can't catch SIGINT\n");
+                close(sub_fd);
+                close(server_fd);
+                unlink(sub_pipe);
+                exit(EXIT_FAILURE);
+            }
+            num_messages++;
+        }   
+    }
+
+    if(bytes_read <0){
+            session_active = false;
             close(sub_fd);
             close(server_fd);
             unlink(sub_pipe);
-            return -1;
-        }
-        num_messages++;
+            exit(EXIT_FAILURE);
     }
+
     close(sub_fd);
     close(server_fd);
     unlink(sub_pipe);
-    return 0;
+    exit(EXIT_SUCCESS);
 }

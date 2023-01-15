@@ -1,4 +1,3 @@
-
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,14 +12,31 @@ int session_id;
 int pub_pipe;
 char pipe_file[PIPE_PATH_MAX_SIZE];
 bool session_active;
+int global_pub_pipe;
+char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
 void sig_handler(int signo) {
-    if (signo == SIGINT) {
+    if (signo == SIGQUIT) {
         session_active = false;
+        fprintf(stderr, "[INFO]: closing named pipe\n");
+        close(global_pub_pipe); 
+        unlink(global_pipe_name);
     }
 }
 
-void start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
+void send_msg_server(int server_pipe, char const * pipe_path, char const *box_name){
+    task task_op;
+	task_op.opcode = OP_CODE_WRITE;
+	strcpy(task_op.pipe_path, pipe_path);
+    strcpy(task_op.box_name, box_name);
+    
+	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+}
+
+int start_server_connection(int server_pipe, char const * pipe_path, char const *box_name) {
 
 	/* Create client pipe */
 	//strcpy(client_pipe_file, pipe_path);
@@ -33,10 +49,21 @@ void start_server_connection(int server_pipe, char const * pipe_path, char const
     printf("SSC : 1\n");
     
 	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
-        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        fprintf(stderr, "failed to read from the server\n");
 		exit(EXIT_FAILURE);
 	}
-    printf("SSC : 2\n");
+
+    int pub_pipe = open(pipe_path, O_RDONLY);
+    if (pub_pipe == -1){
+        return -1;
+    }
+    int server_return;
+    if (read(pub_pipe, &server_return, sizeof(server_return)) == -1){
+        fprintf(stderr, "failed to read from the server\n");
+        return -1;
+    }
+    return server_return;
+    
 }
 
 
@@ -54,9 +81,6 @@ int main(int argc, char **argv) {
     char *pipe_name = argv[2];
     char *box_name = argv[3];
 
-    if (unlink(pipe_name) == -1 && errno != ENOENT) {
-		return -1;
-	}
 
     if (strlen(box_name) > PATH_MAX_SIZE || strlen(pipe_name) > PIPE_PATH_MAX_SIZE){
         fprintf(stderr, "The arguments surpassed the maximum size allowed\n");
@@ -77,32 +101,35 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    printf("1\n");
-    start_server_connection(server_pipe, pipe_name, box_name);
-    printf("2\n");
+    if(start_server_connection(server_pipe, pipe_name, box_name) == -1){
+        exit(EXIT_FAILURE);
+    }
+    send_msg_server(server_pipe,pipe_name, box_name);
     int pipe_fhandle = open(pipe_name, O_WRONLY);
     if (pipe_fhandle == -1) {
             fprintf(stderr, "Failed to open the named pipe");
             exit(EXIT_FAILURE);
         }
-    printf("3\n");
-    char buffer[1], buffer2[1024];
 
-    memset(buffer2,0,sizeof(buffer));
-    int i = 0;
+    global_pub_pipe = pipe_fhandle;
+    strcpy(global_pipe_name,pipe_name);
+
+    char buffer1[1024];
+    ssize_t bytes_read;
+
+    memset(buffer1,0,sizeof(buffer1));
+
     session_active = true;
     while(session_active == true){
-       while(read(STDIN_FILENO, &buffer, 1) > 0 || strcmp(buffer,"\n") == 0){
-            printf("ainda estou a ler\n");
-            if (signal(SIGINT, sig_handler) == SIG_ERR) {
+       while((bytes_read = read(STDIN_FILENO, buffer1, sizeof(buffer1))) > 0 || strcmp(buffer1,"\n") != 0){
+            if (signal(SIGQUIT, sig_handler) == SIG_ERR) {
+                //nesta função ainda vou para o close pipe ou tenho de fzr isso dentro do sig_handler?
                 printf("\n can't catch SIGINT\n");
                 break;
             }
-            memset(buffer2 + i,strlen(buffer), 1);
-            i++;
+            write(pipe_fhandle, buffer1, bytes_read); 
        } 
-       printf("estou aqui\n");
-        write(pipe_fhandle, buffer2, sizeof(buffer2)); 
+       
     }
 
     fprintf(stderr, "[INFO]: closing named pipe\n");
