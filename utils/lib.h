@@ -17,6 +17,7 @@
 #define MAX_BOXES 32
 #define MESSAGE_SIZE 1024
 #define MAX_REQUEST_SIZE 1030
+#define FILE_MAX_SIZE 1024
 
 enum {
     OP_CODE_LOGIN_PUB = 1,

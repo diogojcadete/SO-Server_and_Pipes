@@ -82,7 +82,7 @@ void sub_connect_request(task* builder_t) {
     int tfs_fd;
     tfs_fd = tfs_open(&builder_t->box_name, TFS_O_APPEND);
     if(tfs_fd == -1){
-        return NULL;
+        exit(EXIT_FAILURE);
     }
     ssize_t bytes_read_box;
     bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
