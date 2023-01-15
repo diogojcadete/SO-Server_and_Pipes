@@ -15,7 +15,7 @@ bool session_active;
 int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
-char task_to_string(task builder_t){
+char *task_to_string(task builder_t){
     return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
 }
 

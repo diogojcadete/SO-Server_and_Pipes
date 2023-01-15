@@ -49,7 +49,7 @@ static void end_mbroker(int sig) {
     }
 }
 
-char task_error_box_to_str(task builder_t){
+char *task_error_box_to_str(task builder_t){
     return ("%d|%d|%s", builder_t.opcode, builder_t.return_value, builder_t.error);
 }
 
@@ -213,7 +213,7 @@ void box_create_request(task* builder_t) {
     }
 }
 
-void box_remove_request(task builder_t){
+void box_remove_request(task *builder_t){
 
     int pipe_fd = open(builder_t->pipe_path, O_WRONLY);
     char res_remove[sizeof(uint8_t) + 2 + sizeof(int32_t) + sizeof(char) * MAX_ERROR_SIZE];
@@ -223,8 +223,8 @@ void box_remove_request(task builder_t){
         task_op.opcode = OP_CODE_CREATE_BOX_RESPONSE;
         task_op.return_value = -1;
         strcpy(task_op.error,"THERE AREN'T ANY BOXES");
-        strcpy(res_create, task_error_box_to_str(task_op));
-        ssize_t bytes_written = write(pipe_fd, &res_create, sizeof(res_create));
+        strcpy(res_remove, task_error_box_to_str(task_op));
+        ssize_t bytes_written = write(pipe_fd, &res_remove, sizeof(res_remove));
         if(bytes_written == -1){
             exit(EXIT_FAILURE);
         }
@@ -232,7 +232,7 @@ void box_remove_request(task builder_t){
     else{
         int index;
         for(int i = 0; i< current_boxes; i++){
-            if(strcmp(boxes[i].box_name, box_name) == 0){
+            if(strcmp(boxes[i].box_name, builder_t->box_name) == 0){
                 index = i;
                 break;
             }
@@ -242,7 +242,7 @@ void box_remove_request(task builder_t){
         }
     }
 
-    if(tfs_unlink(box_name)==-1){
+    if(tfs_unlink(builder_t->box_name)==-1){
         exit(EXIT_FAILURE);
     }
 
@@ -322,7 +322,6 @@ void *task_handler(){
 int initialize_threads(task *builder_t) {
 
     for (uint32_t i = 0; i < number_max_sessions; i++) {
-        builder_t[i].not_building = true;
         int return_value;
         //initialize mutex for task
         

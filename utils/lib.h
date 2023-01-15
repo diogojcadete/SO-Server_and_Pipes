@@ -52,6 +52,8 @@ typedef struct{
     pthread_t thread;
     char error[MAX_ERROR_SIZE];
     int return_value;
+    uint64_t box_size;
+    uint8_t last;
 }task;
 
 typedef struct{
@@ -63,7 +65,7 @@ task string_to_task(char* building) {
     task builder;
     memset(builder.pipe_path, 0, sizeof(builder.pipe_path));
     memset(builder.box_name, 0, sizeof(builder.box_name));
-    memset(builder.error_message, 0, sizeof(builder.error));
+    memset(builder.error, 0, sizeof(builder.error));
     memset(builder.message, 0, sizeof(builder.message));
     sscanf(building, "%d|%s|%s", &builder.opcode);
     switch(builder.opcode){
@@ -81,7 +83,7 @@ task string_to_task(char* building) {
             sscanf(building, "%d|%s", &builder.opcode, builder.pipe_path);
             return builder;  
         case(OP_CODE_LIST_BOXES_RESPONSE):
-            sscanf(building, "%d|%d|%s|%llu|%llu|%llu", &builder.opcode, .last, builder.box_name, &builder.box_size, &builder.num_publishers, &builder.num_subscribers);
+            sscanf(building, "%d|%d|%s|%llu|%llu|%llu", &builder.opcode, builder.last, builder.box_name, &builder.box_size, &builder.num_publishers, &builder.num_subscribers);
             return builder;
         case(OP_CODE_WRITE):
         case(OP_CODE_READ):

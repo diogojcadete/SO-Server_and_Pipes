@@ -14,7 +14,7 @@
 int server_fd;
 int man_fd;
 
-char task_to_string(task builder_t){
+char *task_to_string(task builder_t){
     return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
 }
 
