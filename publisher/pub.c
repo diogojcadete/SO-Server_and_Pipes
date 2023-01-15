@@ -15,6 +15,14 @@ bool session_active;
 int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
+char wr_task_to_string(task builder_t, char *message){
+    return ("%d|%s", builder_t.opcode, builder_t.pipe_path, message);
+}
+
+char task_to_string(task builder_t){
+    return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+}
+
 void sig_handler(int signo) {
     if (signo == SIGQUIT) {
         session_active = false;
@@ -24,13 +32,15 @@ void sig_handler(int signo) {
     }
 }
 
-void send_msg_server(int server_pipe, char const * pipe_path, char const *box_name){
+void send_msg_server(int pub_pipe, char const * pipe_path, char const *message){
     task task_op;
 	task_op.opcode = OP_CODE_WRITE;
 	strcpy(task_op.pipe_path, pipe_path);
-    strcpy(task_op.box_name, box_name);
+
+    char pub_wr_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
+    strcpy(pub_wr_request, wr_task_to_string(task_op, message));
     
-	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
+	if (write(pub_pipe, &pub_wr_request, sizeof(pub_wr_request)) == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
@@ -42,13 +52,16 @@ int start_server_connection(int server_pipe, char const * pipe_path, char const 
 	//strcpy(client_pipe_file, pipe_path);
 
 	/* Send request to server */
+
+
 	task task_op;
 	task_op.opcode = OP_CODE_LOGIN_PUB;
 	strcpy(task_op.pipe_path, pipe_path);
     strcpy(task_op.box_name, box_name);
-    printf("SSC : 1\n");
-    
-	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
+    char pub_request[sizeof(uint8_t) + 2 + (PIPE_PATH_MAX_SIZE * sizeof(char)) + (sizeof(char) * MAX_BOX_NAME)];
+    strcpy(pub_request,task_to_string(task_op));
+
+	if (write(server_pipe, &pub_request, sizeof(pub_request)) == -1) {
         fprintf(stderr, "failed to read from the server\n");
 		exit(EXIT_FAILURE);
 	}
@@ -104,7 +117,6 @@ int main(int argc, char **argv) {
     if(start_server_connection(server_pipe, pipe_name, box_name) == -1){
         exit(EXIT_FAILURE);
     }
-    send_msg_server(server_pipe,pipe_name, box_name);
     int pipe_fhandle = open(pipe_name, O_WRONLY);
     if (pipe_fhandle == -1) {
             fprintf(stderr, "Failed to open the named pipe");
@@ -114,7 +126,7 @@ int main(int argc, char **argv) {
     global_pub_pipe = pipe_fhandle;
     strcpy(global_pipe_name,pipe_name);
 
-    char buffer1[1024];
+    char buffer1[MESSAGE_MAX_SIZE];
     ssize_t bytes_read;
 
     memset(buffer1,0,sizeof(buffer1));
@@ -127,7 +139,7 @@ int main(int argc, char **argv) {
                 printf("\n can't catch SIGINT\n");
                 break;
             }
-            write(pipe_fhandle, buffer1, bytes_read); 
+            send_msg_server(pipe_fhandle, pipe_name, buffer1);
        } 
        
     }

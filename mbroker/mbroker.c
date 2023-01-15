@@ -18,7 +18,6 @@
 #define MAX_SUBS 1024
 
 typedef struct{
-    bool is_free;
     char *box_name;
     uint8_t last;
     uint64_t box_size;
@@ -52,6 +51,15 @@ int init_server() {
 	return 0;
 }
 
+task string_to_task(char* building) {
+    task task_op;
+    memset(task_op.pipe_path, 0, sizeof(task_op.pipe_path));
+    memset(task_op.box_name, 0, sizeof(task_op.box_name));
+    sscanf(building, "%d|%s|%s", &task_op.opcode, task_op.pipe_path, task_op.box_name);
+    return task_op;
+}
+
+
 int pub_connect_request(task* builder_t) {
 
     // Check if there is already a publisher connected to the same mailbox
@@ -72,7 +80,7 @@ int pub_connect_request(task* builder_t) {
 void sub_connect_request(task* builder_t) {
    for (int i = 0; i < current_boxes; i++) {
         if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
-            strcpy(boxes[i].subs_array_pipe_path[boxes[i].num_subscribers], (char *)builder_t->pipe_path);
+           strcpy(&boxes[i].subs_array_pipe_path[boxes[i].num_subscribers], builder_t->pipe_path);
             boxes[i].num_subscribers ++;
         }
    } 
@@ -80,7 +88,7 @@ void sub_connect_request(task* builder_t) {
    message_sub.opcode = OP_CODE_READ;
    char buffer_box[MESSAGE_MAX_SIZE];
     int tfs_fd;
-    tfs_fd = tfs_open(&builder_t->box_name, TFS_O_APPEND);
+    tfs_fd = tfs_open(builder_t->box_name, TFS_O_APPEND);
     if(tfs_fd == -1){
         exit(EXIT_FAILURE);
     }
@@ -88,7 +96,7 @@ void sub_connect_request(task* builder_t) {
     bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
     strcpy(message_sub.message, buffer_box);
     int sub_pipe;
-    if(sub_pipe = open(builder_t->pipe_path, O_WRONLY)==-1){
+    if((sub_pipe = open(builder_t->pipe_path, O_WRONLY))==-1){
         exit(EXIT_FAILURE);
     }
     if(write(sub_pipe, &message_sub, sizeof(message)) == -1){
@@ -98,57 +106,34 @@ void sub_connect_request(task* builder_t) {
 
 }
 
-void box_create_request(task* builder_t) {
-    int return_value;
-    int pipe;
-    char client_name[MAX_CLIENT_NAME];
-    char box_name[MAX_BOXES];
-
-    // Copy client_name and box_name from buffer
-    memcpy(client_name, builder_t->buffer + 1, MAX_CLIENT_NAME);
-    memcpy(box_name, builder_t->buffer + 1 + MAX_CLIENT_NAME, MAX_BOXES);
-
-    // Open the pipe for writing
-    pipe = open(client_name, O_WRONLY);
-    if (pipe == -1) {
-        perror("Error opening pipe for writing");
-        return;
-    }
-
+int box_create_request(task* builder_t) {
     // Check if the box already exists
-    for (int i = 0; i < MAX_BOXES; i++) {
-        if (strcmp(box_name, boxes[i].box_name) == 0) {
-            return_value = -1;
-            if (write(pipe, &return_value, sizeof(int)) == 0) {
-                close(pipe);
-                return;
-            }
+    for (int i = 0; i < current_boxes; i++) {
+        if (strcmp(builder_t->box_name, boxes[i].box_name) == 0) {
+            return -1;
         }
+        
+    }
+    int fhandle;
+    fhandle = tfs_open(builder_t->box_name,TFS_O_CREAT);
+    if(fhandle == -1){
+        exit(-1);
     }
 
-    // Create the new box
-    for (int i = 0; i < MAX_BOXES; i++) {
-        if (boxes[i].is_free) {
-            boxes[i].box_name = box_name;
-            boxes[i].box_size = 1024;
-            boxes[i].is_free = false;
-            boxes[i].last = 1;
-            boxes[i].num_publishers = 0;
-            boxes[i].num_subscribers = 0;
-            if (i != 0) {
-                boxes[i - 1].last = 0;
-            }
-            current_boxes++;
-            return_value = 0;
-            if (write(pipe, &return_value, sizeof(int)) == 0) {
-                close(pipe);
-                return;
-            }
-        }
-    }
+    mail_box new_box = {
+        .box_name = builder_t->box_name,
+        .box_size = 1024,
+        .last = 1,
+        .num_publishers = 0,
+        .num_subscribers = 0,
+        .subs_array_pipe_path = {"0"}
+    };
+
+    boxes[current_boxes] = new_box;
+    current_boxes ++;
 
     // If the function reaches here, it means that there are no free boxes available
-    return_value = -1;
+    return_value = -0;
     if (write(pipe, &return_value, sizeof(int)) == 0) {
         close(pipe);
         return;
@@ -360,12 +345,15 @@ int main(int argc, char **argv) {
     printf("4\n");
     for(;;){
         task task_op;
-        if((server_read = read(server_pipe, &task_op, sizeof(task)))<0){
+        char request[sizeof(uint8_t) + 2 + (PIPE_PATH_MAX_SIZE * sizeof(char)) + (sizeof(char) * MAX_BOX_NAME)];
+        if((server_read = read(server_pipe, &request, sizeof(task)))<0){
             return -1;
         } 
         if(server_read<0){
             break;
         }
+        if()
+        task_op = string_to_task(request);
         switch (task_op.opcode)
         {
         case OP_CODE_LOGIN_PUB:
@@ -412,7 +400,7 @@ int main(int argc, char **argv) {
                         strcpy(buffer_sub,buffer);
                         strcpy(new_message.message, buffer_sub);
                         int sub_pipe;
-                        if(sub_pipe = open(boxes[i].subs_array_pipe_path[j], O_WRONLY)==-1){
+                        if((sub_pipe = open(boxes[i].subs_array_pipe_path[j], O_WRONLY))==-1){
                             exit(EXIT_FAILURE);
                         }
                         if(write(sub_pipe, &new_message, sizeof(message)) == -1){

@@ -10,7 +10,7 @@
 #include <pthread.h>
 
 #define FILE_NAME_MAX_SIZE 256
-#define PIPE_PATH_MAX_SIZE 32
+#define PIPE_PATH_MAX_SIZE 256
 #define MESSAGE_MAX_SIZE 1024
 #define MAX_NUM_BOXES 1024 
 #define PATH_MAX_SIZE 32
@@ -18,6 +18,7 @@
 #define MESSAGE_SIZE 1024
 #define MAX_REQUEST_SIZE 1030
 #define FILE_MAX_SIZE 1024
+#define MAX_BOX_NAME 32
 
 enum {
     OP_CODE_LOGIN_PUB = 1,
@@ -36,11 +37,8 @@ enum {
 typedef struct{
     char pipe_path[PIPE_PATH_MAX_SIZE];                        // Pointer to piper path name
     uint8_t opcode;                            //Type of task, deffined by the OP_CODE
-    int session_id;
-    char box_name[32];
-    char buffer[MAX_REQUEST_SIZE];          // Buffer to read requests
-    int user_type;                          //Type of user, deffined by the enum
-    bool not_building;                      //If is building a session
+    char box_name[MAX_BOX_NAME];
+    char message[MESSAGE_MAX_SIZE];
     pthread_t thread;
 }task;
 
@@ -48,3 +46,4 @@ typedef struct{
     char message[MESSAGE_MAX_SIZE];
     uint8_t opcode;
 }message;
+

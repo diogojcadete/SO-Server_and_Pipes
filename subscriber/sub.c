@@ -15,6 +15,10 @@ bool session_active;
 int global_pub_pipe;
 char global_pipe_name[PIPE_PATH_MAX_SIZE];
 
+char task_to_string(task builder_t){
+    return ("%d|%s|%s", builder_t.opcode, builder_t.pipe_path, builder_t.box_name);
+}
+
 void sig_handler(int signo) {
     if (signo == SIGINT) {
         session_active = false;
@@ -36,11 +40,24 @@ void start_server_connection(int server_pipe, char const * pipe_path, char const
     strcpy(task_op.box_name, box_name);
     printf("SSC : 1\n");
     
-	if (write(server_pipe, &task_op, sizeof(task)) == -1) {
+    char sub_request[sizeof(uint8_t) + 2 + (PIPE_PATH_MAX_SIZE * sizeof(char)) + (sizeof(char) * MAX_BOX_NAME)];
+    strcpu(sub_request,task_to_string(task_op));
+
+	if (write(server_pipe, &sub_request, sizeof(task)) == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-    printf("SSC : 2\n");
+    
+     int sub_pipe = open(pipe_path, O_RDONLY);
+    if (sub_pipe == -1){
+        return -1;
+    }
+    int server_return;
+    if (read(sub_pipe, &server_return, sizeof(server_return)) == -1){
+        fprintf(stderr, "failed to read from the server\n");
+        return -1;
+    }
+    return server_return;
 }
 
 
