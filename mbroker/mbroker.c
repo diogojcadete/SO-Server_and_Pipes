@@ -166,6 +166,7 @@ void sub_connect_request(task* builder_t) {
             
         }
    } 
+   print("BOB");
     close(sub_pipe);
 
 }
