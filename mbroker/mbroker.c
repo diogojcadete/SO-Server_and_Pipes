@@ -53,11 +53,15 @@ char *task_error_box_to_str(task builder_t){
     return ("%d|%d|%s", builder_t.opcode, builder_t.return_value, builder_t.error);
 }
 
+char *task_to_str(task builder_t){
+    return ("%d|%s", builder_t.opcode, builder_t.message);
+}
+
 task string_to_task(char* building) {
     task task_op;
     memset(task_op.pipe_path, 0, sizeof(task_op.pipe_path));
     memset(task_op.box_name, 0, sizeof(task_op.box_name));
-    sscanf(building, "%d|%s|%s", &task_op.opcode, task_op.pipe_path, task_op.box_name);
+    sscanf(building, "%s|%s|%s", &task_op.opcode, task_op.pipe_path, task_op.box_name);
     return task_op;
 }
 
@@ -83,8 +87,11 @@ void pub_connect_request(task* builder_t) {
                 for(;;){
                     task task_op;
                     char pub_wr_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
-                    ssize_t ret = read(pipe, &pub_wr_request, MAX_REQUEST_SIZE);
-                    
+                    ssize_t bytes_written = read(pipe, pub_wr_request, sizeof(pub_wr_request));
+                    if (bytes_written == -1){
+                        close(pipe);
+                        exit(EXIT_FAILURE);
+                    }
                     task_op = string_to_task(pub_wr_request);
 
                     int box_fhandle = tfs_open(builder_t->box_name, TFS_O_APPEND);
@@ -95,7 +102,7 @@ void pub_connect_request(task* builder_t) {
                     if(bytes_read<0){
                         exit(EXIT_FAILURE);
                     }
-                    if(bytes_read + strlen(task_op.message)>1024){
+                    if((bytes_read + (ssize_t)strlen(task_op.message)) > 1024) {
                         break;
                     }
                     else{
@@ -133,12 +140,6 @@ void sub_connect_request(task* builder_t) {
             if(tfs_fd == -1){
                 exit(EXIT_FAILURE);
             }
-            char sub_rd_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
-            ssize_t bytes_read_box;
-            bytes_read_box = tfs_read(tfs_fd, buffer_box, sizeof(buffer_box));
-            if(bytes_read_box<0){
-                exit(EXIT_FAILURE);
-            }
             for(;;){
                 char sub_rd_request[sizeof(uint8_t) + 1 + (MESSAGE_MAX_SIZE * sizeof(char))];
                 ssize_t bytes_read_box;
@@ -146,14 +147,11 @@ void sub_connect_request(task* builder_t) {
                 if(bytes_read_box<0){
                     exit(EXIT_FAILURE);
                 }
-                int sub_pipe;
-                if((sub_pipe = open(builder_t->pipe_path, O_WRONLY))==-1){
-                    exit(EXIT_FAILURE);
-                }
                 task task_op;
                 task_op.opcode = OP_CODE_READ;
                 strcpy(task_op.message, buffer_box);
-                if(write(sub_pipe, &task_op, sizeof(task_op)) == -1){
+                strcpy(sub_rd_request, task_to_str(task_op));
+                if(write(sub_pipe, &sub_rd_request, sizeof(sub_rd_request)) == -1){
                     close(sub_pipe);
                     exit(EXIT_FAILURE);
                 }
@@ -161,7 +159,10 @@ void sub_connect_request(task* builder_t) {
         }
         else{
             int server_return = 1;
-            if(write(sub_pipe,&server_return, sizeof(server_return)));
+            if(write(sub_pipe,&server_return, sizeof(server_return)) == -1){
+                close(sub_pipe);
+                exit(EXIT_FAILURE);
+            }
             
         }
    } 
@@ -385,11 +386,8 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}   
 
-    printf("3\n");
-
     initialize_threads(builder);
 
-    printf("4\n");
     for(;;){
         task task_op;
         char request[sizeof(uint8_t) + 2 + (PIPE_PATH_MAX_SIZE * sizeof(char)) + (sizeof(char) * MAX_BOX_NAME)];
@@ -407,7 +405,7 @@ int main(int argc, char **argv) {
         case OP_CODE_CREATE_BOX:
         case OP_CODE_LIST:
         case OP_CODE_REMOVE_BOX:
-            printf("5\n");
+
             pcq_enqueue(task_queue, (void *) &task_op);
             break;
 
